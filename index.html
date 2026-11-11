@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#111827">
+  <title>Firebase ID Token Generator</title>
+  <style>
+    :root { color-scheme: light; --bg:#f3f4f6; --card:#fff; --text:#111827; --muted:#6b7280; --line:#e5e7eb; --blue:#2563eb; --green:#047857; --red:#b91c1c; }
+    * { box-sizing:border-box; }
+    body { margin:0; padding:32px 16px; background:var(--bg); color:var(--text); font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+    main { width:min(780px,100%); margin:auto; }
+    h1 { margin:0 0 6px; font-size:clamp(24px,4vw,32px); letter-spacing:-.03em; }
+    h2 { margin:0 0 14px; font-size:18px; }
+    p { color:var(--muted); margin:6px 0 16px; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:22px; margin:18px 0; box-shadow:0 2px 8px #11182708; }
+    .grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    label { display:block; font-weight:600; font-size:13px; margin:0 0 6px; }
+    input, textarea { width:100%; border:1px solid #d1d5db; border-radius:8px; padding:11px 12px; font:inherit; background:white; color:var(--text); }
+    input:focus, textarea:focus { outline:2px solid #bfdbfe; border-color:var(--blue); }
+    .field { min-width:0; }
+    .full { grid-column:1/-1; }
+    .actions { display:flex; flex-wrap:wrap; gap:9px; margin-top:16px; }
+    button { border:0; border-radius:8px; padding:10px 14px; font:600 14px inherit; cursor:pointer; background:var(--blue); color:white; }
+    button.secondary { background:#e5e7eb; color:#111827; }
+    button.google { background:#111827; }
+    button.danger { background:#fee2e2; color:#991b1b; }
+    button:disabled { opacity:.45; cursor:not-allowed; }
+    .check { display:flex; align-items:center; gap:9px; margin-top:12px; color:var(--muted); font-size:13px; }
+    .check input { width:auto; }
+    .status { padding:11px 13px; border-radius:8px; background:#f3f4f6; color:#374151; overflow-wrap:anywhere; }
+    .status.ok { background:#ecfdf5; color:#065f46; }
+    .status.error { background:#fef2f2; color:#991b1b; }
+    .token { min-height:150px; resize:vertical; font:12px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace; overflow-wrap:anywhere; }
+    .meta { display:grid; grid-template-columns:100px 1fr; gap:5px 12px; font-size:14px; overflow-wrap:anywhere; }
+    .meta strong { color:var(--muted); font-weight:600; }
+    .hidden { display:none; }
+    .hint { font-size:12px; }
+    code { background:#f3f4f6; padding:2px 5px; border-radius:4px; }
+    @media(max-width:600px) { body { padding:20px 12px; } .card { padding:17px; } .grid { grid-template-columns:1fr; } .full { grid-column:auto; } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Firebase ID Token Generator</h1>
+    <p>Connect to your own Firebase project, authenticate a user, and copy an ID token for API testing.</p>
+  </header>
+
+  <section class="card">
+    <h2>1. Firebase project configuration</h2>
+    <p class="hint">Find these values in Firebase Console → Project settings → General → Your apps → Web app.</p>
+    <form id="configForm">
+      <div class="grid">
+        <div class="field full">
+          <label for="apiKey">API key</label>
+          <input id="apiKey" autocomplete="off" placeholder="AIza..." required>
+        </div>
+        <div class="field">
+          <label for="authDomain">Auth domain</label>
+          <input id="authDomain" autocomplete="off" placeholder="your-project.firebaseapp.com" required>
+        </div>
+        <div class="field">
+          <label for="projectId">Project ID</label>
+          <input id="projectId" autocomplete="off" placeholder="your-project-id" required>
+        </div>
+        <div class="field full">
+          <label for="appId">App ID</label>
+          <input id="appId" autocomplete="off" placeholder="1:123456789:web:abcdef..." required>
+        </div>
+      </div>
+      <label class="check"><input type="checkbox" id="rememberConfig"> Remember this Firebase configuration on this device</label>
+      <div class="actions">
+        <button type="submit" id="connectBtn">Connect to Firebase</button>
+        <button type="button" class="secondary" id="clearConfigBtn">Clear configuration</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>2. Sign in</h2>
+    <div id="connectionStatus" class="status">Not connected. Enter your Firebase configuration above.</div>
+    <div id="authControls" class="hidden">
+      <div class="grid" style="margin-top:16px">
+        <div class="field full">
+          <label for="email">Email address</label>
+          <input id="email" type="email" autocomplete="username" placeholder="name@example.com">
+        </div>
+        <div class="field full">
+          <label for="password">Password</label>
+          <input id="password" type="password" autocomplete="current-password" placeholder="Firebase account password">
+        </div>
+      </div>
+      <div class="actions">
+        <button type="button" id="emailSignInBtn">Sign in with Email</button>
+        <button type="button" class="secondary" id="googleSignInBtn">Sign in with Google</button>
+        <button type="button" class="secondary" id="createAccountBtn">Create account</button>
+      </div>
+      <p class="hint">Enable the relevant providers in Firebase Console → Authentication → Sign-in method. Google popup sign-in requires this site's domain to be authorized.</p>
+    </div>
+  </section>
+
+  <section class="card hidden" id="tokenSection">
+    <h2>3. Firebase ID token</h2>
+    <div class="meta" style="margin-bottom:16px">
+      <strong>Email</strong><span id="userEmail">—</span>
+      <strong>UID</strong><span id="userUid">—</span>
+    </div>
+    <label for="token">ID token (Bearer token)</label>
+    <textarea id="token" class="token" readonly spellcheck="false" placeholder="Your Firebase ID token appears here."></textarea>
+    <div class="actions">
+      <button type="button" id="copyTokenBtn">Copy token</button>
+      <button type="button" class="secondary" id="refreshTokenBtn">Refresh token</button>
+      <button type="button" class="danger" id="signOutBtn">Sign out</button>
+    </div>
+    <p class="hint">Use this value in Postman → Authorization → Type: Bearer Token. ID tokens are short-lived (typically about one hour).</p>
+  </section>
+
+  <section class="card">
+    <h2>Postman example</h2>
+    <p><strong>Method:</strong> GET</p>
+    <p><strong>URL:</strong> <code>https://api-erp.technikh.com/api/v1/sections?limit=20</code></p>
+    <p><strong>Authorization:</strong> Bearer Token → paste the ID token above.</p>
+  </section>
+
+  <p class="hint">Security: Firebase web API keys identify your project and are not server secrets. Never put service-account credentials in this page. ID tokens are sensitive: do not share them or commit them to a repository. This page does not send configuration or tokens to any custom backend.</p>
+</main>
+
+<script type="module">
+  import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-app.js";
+  import {
+    getAuth, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword,
+    createUserWithEmailAndPassword, onAuthStateChanged, signOut
+  } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-auth.js";
+
+  const $ = (id) => document.getElementById(id);
+  let firebaseApp = null;
+  let auth = null;
+  let unsubscribeAuth = null;
+  let currentUser = null;
+
+  function setStatus(message, kind = "") {
+    $("connectionStatus").textContent = message;
+    $("connectionStatus").className = "status" + (kind ? " " + kind : "");
+  }
+
+  function readConfig() {
+    return {
+      apiKey: $("apiKey").value.trim(),
+      authDomain: $("authDomain").value.trim(),
+      projectId: $("projectId").value.trim(),
+      appId: $("appId").value.trim()
+    };
+  }
+
+  function validConfig(c) {
+    return Object.values(c).every(Boolean);
+  }
+
+  async function disconnect() {
+    if (unsubscribeAuth) unsubscribeAuth();
+    unsubscribeAuth = null;
+    currentUser = null;
+    if (auth) {
+      try { await signOut(auth); } catch (_) {}
+    }
+    auth = null;
+    if (firebaseApp) {
+      try { await deleteApp(firebaseApp); } catch (_) {}
+    }
+    firebaseApp = null;
+    $("authControls").classList.add("hidden");
+    $("tokenSection").classList.add("hidden");
+  }
+
+  $("configForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const config = readConfig();
+    if (!validConfig(config)) {
+      setStatus("Please fill in all four Firebase configuration fields.", "error");
+      return;
+    }
+
+    $("connectBtn").disabled = true;
+    setStatus("Connecting to Firebase…");
+    try {
+      await disconnect();
+      firebaseApp = initializeApp(config);
+      auth = getAuth(firebaseApp);
+
+      if ($("rememberConfig").checked) {
+        localStorage.setItem("firebaseTokenGeneratorConfig", JSON.stringify(config));
+      } else {
+        localStorage.removeItem("firebaseTokenGeneratorConfig");
+      }
+
+      $("authControls").classList.remove("hidden");
+      setStatus(`Connected to Firebase project: ${config.projectId}`, "ok");
+
+      unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+        currentUser = user;
+        if (user) {
+          $("tokenSection").classList.remove("hidden");
+          $("userEmail").textContent = user.email || "(no email)";
+          $("userUid").textContent = user.uid;
+          await showToken(false);
+        } else {
+          $("tokenSection").classList.add("hidden");
+          $("token").value = "";
+        }
+      });
+    } catch (error) {
+      setStatus(`${error.code || "Error"}: ${error.message}`, "error");
+    } finally {
+      $("connectBtn").disabled = false;
+    }
+  });
+
+  async function showToken(forceRefresh) {
+    if (!currentUser) return;
+    try {
+      $("token").value = await currentUser.getIdToken(forceRefresh);
+      setStatus("Signed in. Firebase ID token is ready.", "ok");
+    } catch (error) {
+      setStatus(`${error.code || "Error"}: ${error.message}`, "error");
+    }
+  }
+
+  $("emailSignInBtn").addEventListener("click", async () => {
+    if (!auth) return;
+    const email = $("email").value.trim();
+    const password = $("password").value;
+    if (!email || !password) return setStatus("Enter your email and password.", "error");
+    try {
+      setStatus("Signing in…");
+      await signInWithEmailAndPassword(auth, email, password);
+    } catch (error) {
+      setStatus(`${error.code}: ${error.message}`, "error");
+    }
+  });
+
+  $("createAccountBtn").addEventListener("click", async () => {
+    if (!auth) return;
+    const email = $("email").value.trim();
+    const password = $("password").value;
+    if (!email || !password) return setStatus("Enter an email and password.", "error");
+    try {
+      setStatus("Creating account…");
+      await createUserWithEmailAndPassword(auth, email, password);
+    } catch (error) {
+      setStatus(`${error.code}: ${error.message}`, "error");
+    }
+  });
+
+  $("googleSignInBtn").addEventListener("click", async () => {
+    if (!auth) return;
+    try {
+      setStatus("Opening Google sign-in…");
+      await signInWithPopup(auth, new GoogleAuthProvider());
+    } catch (error) {
+      setStatus(`${error.code}: ${error.message}`, "error");
+    }
+  });
+
+  $("refreshTokenBtn").addEventListener("click", () => showToken(true));
+
+  $("copyTokenBtn").addEventListener("click", async () => {
+    if (!$("token").value) return;
+    try {
+      await navigator.clipboard.writeText($("token").value);
+      setStatus("ID token copied to clipboard.", "ok");
+    } catch (_) {
+      $("token").select();
+      setStatus("Clipboard access was blocked. Select and copy the token manually.", "error");
+    }
+  });
+
+  $("signOutBtn").addEventListener("click", async () => {
+    if (!auth) return;
+    try {
+      await signOut(auth);
+      $("password").value = "";
+      setStatus("Signed out.", "ok");
+    } catch (error) {
+      setStatus(`${error.code}: ${error.message}`, "error");
+    }
+  });
+
+  $("clearConfigBtn").addEventListener("click", async () => {
+    await disconnect();
+    ["apiKey", "authDomain", "projectId", "appId"].forEach(id => $(id).value = "");
+    $("rememberConfig").checked = false;
+    localStorage.removeItem("firebaseTokenGeneratorConfig");
+    setStatus("Configuration cleared. Not connected.");
+  });
+
+  // Restore configuration only if the user previously opted in.
+  try {
+    const saved = JSON.parse(localStorage.getItem("firebaseTokenGeneratorConfig") || "null");
+    if (saved && validConfig(saved)) {
+      $("apiKey").value = saved.apiKey;
+      $("authDomain").value = saved.authDomain;
+      $("projectId").value = saved.projectId;
+      $("appId").value = saved.appId;
+      $("rememberConfig").checked = true;
+    }
+  } catch (_) {
+    localStorage.removeItem("firebaseTokenGeneratorConfig");
+  }
+</script>
+</body>
+</html>
